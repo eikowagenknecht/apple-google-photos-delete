@@ -29,9 +29,16 @@ def get_photo_infos(creds: google.auth.credentials.Credentials, photos: list) ->
     url = "https://photoslibrary.googleapis.com/v1/mediaItems:batchGet"
     photo_infos = []
 
-    for photo in photos:
-        photo_id = photo["id"]
-        response = requests.get(url, headers=headers, params={"mediaItemIds": photo_id})
+    # Batch request this in chunks of 50
+    for i in range(0, len(photos), 50):
+        batch_photos = photos[i : i + 50]
+        request_ids = []
+        for photo in batch_photos:
+            request_ids.append(photo["id"])
+        logger.info(f"Fetching photos starting at i {i}...")
+        response = requests.get(
+            url, headers=headers, params={"mediaItemIds": request_ids}
+        )
         if response.status_code == 200:
             data = response.json()
             for mediaItemResult in data["mediaItemResults"]:
@@ -44,8 +51,13 @@ def get_photo_infos(creds: google.auth.credentials.Credentials, photos: list) ->
                             "creationTime": photo["creationTime"],
                         }
                     )
+                    if "contributorInfo" in mediaItemResult["mediaItem"]:
+                        # Unfortunately this info is onlz available for albums
+                        logger.info(
+                            f"Photo {photo['filename']} was shared by {mediaItemResult['mediaItem']['contributorInfo']['displayName']}"
+                        )
         else:
-            logger.error(f"Failed to fetch photo with ID {photo_id}: {response.json()}")
+            logger.error(f"Failed to fetch photos starting at i {i}: {response.json()}")
 
     return photo_infos
 
